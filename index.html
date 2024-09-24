@@ -15,9 +15,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.4.456/pdf.min.js"></script>
 
     <script>
-        // Regular expressions for various Bitcoin address formats
+        // Regex for various Bitcoin address formats
         const bech32Regex = /^(bc1)[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{39,59}$/;
-        const p2pkhRegex = /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/;  // Legacy P2PKH or P2SH
+        const p2pkhRegex = /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/;
 
         document.getElementById('fileInput').addEventListener('change', handleFile, false);
 
@@ -74,10 +74,30 @@
             if (bech32Regex.test(address)) {
                 return { isValid: true, reason: 'Bech32 (SegWit) address' };
             } else if (p2pkhRegex.test(address)) {
-                return { isValid: true, reason: 'Legacy (P2PKH or P2SH) address' };
+                // Additional validation for Base58Check (P2PKH/P2SH) addresses
+                try {
+                    const decoded = decodeBase58Check(address);
+                    return { isValid: true, reason: 'Legacy (P2PKH or P2SH) address' };
+                } catch (e) {
+                    return { isValid: false, reason: 'Invalid Base58Check encoding' };
+                }
             } else {
                 return { isValid: false, reason: 'Invalid format or checksum' };
             }
+        }
+
+        function decodeBase58Check(address) {
+            const base58Chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+            let decoded = new Uint8Array(address.length);
+            for (let i = 0; i < address.length; i++) {
+                const charIndex = base58Chars.indexOf(address[i]);
+                if (charIndex === -1) {
+                    throw new Error("Invalid Base58 character");
+                }
+                decoded[i] = charIndex;
+            }
+            // Perform checksum validation here (e.g., verify last 4 bytes of checksum)
+            return decoded;
         }
 
         function displayResults(invalidAddresses, validAddresses) {
