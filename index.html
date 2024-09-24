@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Bitcoin Address Validator</title>
+</head>
+<body>
+    <h1>Bitcoin Address Validator</h1>
+    <p>Select a CSV, XLSX, or PDF file containing Bitcoin addresses to validate:</p>
+    <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf"/>
+    <div id="output"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.4.456/pdf.min.js"></script>
+
+    <script>
+        // Regular expressions for various Bitcoin address formats
+        const bech32Regex = /^(bc1)[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{39,59}$/;
+        const p2pkhRegex = /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$/;  // Legacy P2PKH or P2SH
+
+        document.getElementById('fileInput').addEventListener('change', handleFile, false);
+
+        function handleFile(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+
+            if (file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+                reader.onload = function(e) {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const sheet = workbook.Sheets[firstSheetName];
+                    const addresses = XLSX.utils.sheet_to_json(sheet, { header: 1 }).flat();
+                    checkAddresses(addresses);
+                };
+                reader.readAsArrayBuffer(file);
+            } else if (file.name.endsWith('.pdf')) {
+                reader.onload = function(e) {
+                    const loadingTask = pdfjsLib.getDocument(e.target.result);
+                    loadingTask.promise.then(function(pdf) {
+                        let addresses = [];
+                        for (let page = 1; page <= pdf.numPages; page++) {
+                            pdf.getPage(page).then(function(page) {
+                                page.getTextContent().then(function(textContent) {
+                                    textContent.items.forEach(item => addresses.push(item.str.trim()));
+                                    if (page === pdf.numPages) {
+                                        checkAddresses(addresses);
+                                    }
+                                });
+                            });
+                        }
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        }
+
+        function checkAddresses(addresses) {
+            const invalidAddresses = [];
+            const validAddresses = [];
+            addresses.forEach(address => {
+                const result = validateAddress(address);
+                if (!result.isValid) {
+                    invalidAddresses.push(`${address} (${result.reason})`);
+                } else {
+                    validAddresses.push(address);
+                }
+            });
+            displayResults(invalidAddresses, validAddresses);
+        }
+
+        function validateAddress(address) {
+            if (bech32Regex.test(address)) {
+                return { isValid: true, reason: 'Bech32 (SegWit) address' };
+            } else if (p2pkhRegex.test(address)) {
+                return { isValid: true, reason: 'Legacy (P2PKH or P2SH) address' };
+            } else {
+                return { isValid: false, reason: 'Invalid format or checksum' };
+            }
+        }
+
+        function displayResults(invalidAddresses, validAddresses) {
+            const output = document.getElementById('output');
+            output.innerHTML = "<h3>Validation Results:</h3>";
+            if (invalidAddresses.length > 0) {
+                output.innerHTML += `<h4>Invalid Addresses:</h4><ul>${invalidAddresses.map(address => `<li>${address}</li>`).join('')}</ul>`;
+            } else {
+                output.innerHTML += "<p>All addresses are valid!</p>";
+            }
+
+            output.innerHTML += `<h4>Valid Addresses:</h4><ul>${validAddresses.map(address => `<li>${address}</li>`).join('')}</ul>`;
+        }
+    </script>
+</body>
+</html>
